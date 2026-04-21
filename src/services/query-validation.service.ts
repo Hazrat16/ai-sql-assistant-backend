@@ -154,3 +154,21 @@ export function assertExecutableSelect(sql: string) {
   validateAstNode(astRoot);
   return trimmed;
 }
+
+export interface CompileSqlResult {
+  valid: true;
+  normalizedSql: string;
+  statementType: "SELECT";
+  readOnly: true;
+}
+
+/** Parse + validate user SQL without executing it. */
+export function compileUserSql(sql: string): CompileSqlResult {
+  const normalizedSql = assertExecutableSelect(sql);
+  return {
+    valid: true,
+    normalizedSql,
+    statementType: "SELECT",
+    readOnly: true,
+  };
+}

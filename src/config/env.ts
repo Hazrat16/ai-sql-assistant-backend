@@ -29,6 +29,19 @@ const envSchema = z.object({
       const s = val.trim();
       return s.length ? s : undefined;
     }, z.string().min(1).optional()),
+  /** OpenAI-compatible API root (e.g. Ollama: http://localhost:11434/v1). Omit for api.openai.com */
+  OPENAI_BASE_URL: z
+    .preprocess((val: unknown) => {
+      if (val === undefined || val === null) return undefined;
+      if (typeof val !== "string") return undefined;
+      const s = val.trim().replace(/\/$/, "");
+      return s.length ? s : undefined;
+    }, z.string().min(1).optional()),
+  /**
+   * json_object: pass response_format (works on OpenAI; some local servers reject it).
+   * none: rely on prompt only; parser tolerates fenced JSON.
+   */
+  OPENAI_RESPONSE_FORMAT: z.enum(["json_object", "none"]).default("json_object"),
   OPENAI_MODEL: z.string().default("gpt-4o-mini"),
   DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),

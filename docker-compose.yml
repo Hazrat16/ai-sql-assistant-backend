@@ -12,6 +12,15 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d:ro
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-sql-assistant-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
 
 volumes:
   postgres_data:
+  ollama_data:
