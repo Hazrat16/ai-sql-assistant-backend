@@ -7,6 +7,15 @@ import type { SqlRow } from "../types/api.js";
 export async function executeReadOnlySelect(sql: string): Promise<SqlRow[]> {
   const env = loadEnv();
   const safeSql = assertExecutableSelect(sql);
+  if (env.STUB_DATABASE) {
+    return [
+      {
+        _stub: true,
+        _hint: "STUB_DATABASE is enabled — start Postgres and run without this flag to execute against a real database.",
+        _sql_preview: safeSql.slice(0, 200),
+      },
+    ];
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

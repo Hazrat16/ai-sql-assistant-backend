@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:stub": "STUB_DATABASE=true tsx watch src/server.ts",
+    "dev:deps": "docker compose up -d",
+    "dev:stack": "docker compose up -d && tsx src/dev/wait-for-dev-deps.ts && tsx watch src/server.ts",
+    "dev:deps:down": "docker compose down",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "lint": "eslint src --ext .ts",

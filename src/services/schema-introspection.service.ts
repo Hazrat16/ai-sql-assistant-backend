@@ -1,3 +1,4 @@
+import { loadEnv } from "../config/env.js";
 import { pool } from "../db/pool.js";
 import { AppError } from "../utils/errors.js";
 
@@ -16,7 +17,38 @@ export interface SchemaPayload {
   tables: SchemaTable[];
 }
 
+function stubPublicSchema(): SchemaPayload {
+  return {
+    tables: [
+      {
+        name: "users",
+        columns: [
+          { name: "id", type: "integer", nullable: false },
+          { name: "full_name", type: "text", nullable: true },
+          { name: "email", type: "text", nullable: true },
+          { name: "status", type: "text", nullable: true },
+          { name: "created_at", type: "timestamptz", nullable: true },
+          { name: "updated_at", type: "timestamptz", nullable: true },
+        ],
+      },
+      {
+        name: "orders",
+        columns: [
+          { name: "id", type: "integer", nullable: false },
+          { name: "user_id", type: "integer", nullable: false },
+          { name: "total_cents", type: "bigint", nullable: false },
+          { name: "created_at", type: "timestamptz", nullable: true },
+        ],
+      },
+    ],
+  };
+}
+
 export async function fetchPublicSchema(): Promise<SchemaPayload> {
+  if (loadEnv().STUB_DATABASE) {
+    return stubPublicSchema();
+  }
+
   const client = await pool.connect();
   try {
     const res = await client.query<{

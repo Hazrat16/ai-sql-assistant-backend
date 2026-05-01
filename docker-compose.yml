@@ -1,3 +1,6 @@
+# One-shot real stack + API: npm run dev:stack
+# Backend only (expects Postgres already): npm run dev
+# No DB: STUB_DATABASE=true npm run dev  or  npm run dev:stub
 services:
   postgres:
     image: postgres:16-alpine
@@ -12,6 +15,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_sql_assistant"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
   ollama:
     image: ollama/ollama:latest
     container_name: ai-sql-assistant-ollama

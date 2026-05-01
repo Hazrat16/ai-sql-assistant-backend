@@ -56,6 +56,18 @@ const envSchema = z.object({
     }, z.enum(["true", "false"]))
     .transform((v) => v === "true"),
   QUERY_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(60),
+  /**
+   * When true: no Postgres on startup; /schema and /execute use synthetic data.
+   * NL→SQL still runs (OpenAI/Ollama) or falls back to offline rules from the stub schema.
+   */
+  STUB_DATABASE: z
+    .preprocess((val: unknown) => {
+      if (val === undefined || val === null || val === "") return "false";
+      if (typeof val === "boolean") return val ? "true" : "false";
+      if (typeof val === "string") return val.toLowerCase();
+      return "false";
+    }, z.enum(["true", "false"]))
+    .transform((v) => v === "true"),
 });
 
 export type Env = z.infer<typeof envSchema>;
