@@ -157,7 +157,10 @@ export async function generateSqlForNaturalLanguage(userQuery: string): Promise<
   try {
     aiResult = await generateNlSqlResponse({ userQuery: trimmed, schemaJson });
   } catch (err) {
-    logger.error({ err }, "AI generation failed; using fallback response");
+    if (err instanceof AppError && err.code === "OPENAI_ERROR") {
+      throw err;
+    }
+    logger.error({ err }, "AI generation failed; using offline fallback");
     aiResult = fallbackResponse(trimmed, schema);
   }
 

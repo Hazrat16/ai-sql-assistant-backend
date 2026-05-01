@@ -14,9 +14,10 @@ export function buildNlToSqlSystemPrompt(): string {
     "Always qualify tables with schemas when ambiguous (default to public).",
     "Use ISO-friendly casts and safe aggregations. Avoid vendor-specific functions beyond PostgreSQL.",
     "If the question cannot be answered with the provided schema, still return syntactically valid SQL that comes as close as possible and explain the limitation.",
-    "Return ONLY JSON with keys: sql (string), explanation (string), message (optional string, short assistant summary).",
-    "The sql field must be a single statement ending with a semicolon is optional.",
-    "Never include Markdown fences or commentary outside JSON.",
+    "Return ONLY a single JSON object. No markdown, no prose before or after the JSON, no ``` fences.",
+    "Required JSON keys: sql (string), explanation (string). Optional key: message (short assistant summary).",
+    "The sql field must be one PostgreSQL SELECT (semicolon optional).",
+    "If you output anything other than raw JSON (for example explanatory text or SQL inside markdown), the assistant cannot parse your reply.",
   ].join("\n");
 }
 

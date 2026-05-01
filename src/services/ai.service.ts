@@ -15,12 +15,61 @@ const nlJsonSchema = z.object({
 
 function extractJsonObject(text: string): string {
   const trimmed = text.trim();
-  const fenced = /^```(?:json)?\s*([\s\S]*?)```$/im.exec(trimmed);
-  if (fenced?.[1]) return fenced[1].trim();
+  const fencedFull = /^```(?:json)?\s*([\s\S]*?)```$/im.exec(trimmed);
+  if (fencedFull?.[1]) return fencedFull[1].trim();
+  const fencedAny = /```(?:json)?\s*([\s\S]*?)```/im.exec(trimmed);
+  if (fencedAny?.[1]) return fencedAny[1].trim();
   const start = trimmed.indexOf("{");
   const end = trimmed.lastIndexOf("}");
   if (start >= 0 && end > start) return trimmed.slice(start, end + 1);
   return trimmed;
+}
+
+function tryParseJsonContent(raw: string): { value: unknown } | undefined {
+  const trimmed = raw.trim();
+  try {
+    return { value: JSON.parse(trimmed) as unknown };
+  } catch {
+    /* continue */
+  }
+  try {
+    return { value: JSON.parse(extractJsonObject(trimmed)) as unknown };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Ollama often ignores \"JSON only\"; recover ```sql fences when JSON parsing fails. */
+function tryParseFromSqlFence(raw: string): NaturalQueryResponse | null {
+  const match = /```(?:sql|postgresql|postgres)?\s*([\s\S]*?)```/i.exec(raw);
+  if (!match?.[1]) return null;
+  let sql = match[1].trim();
+  if (!sql) return null;
+  if (!sql.endsWith(";")) sql = `${sql};`;
+  return {
+    sql,
+    explanation:
+      "Parsed SQL from a markdown code block in the model reply (expected strict JSON). Configure the model to emit raw JSON only for best results.",
+    message: "Recovered from markdown SQL fence",
+  };
+}
+
+function parseNaturalQueryResponseFromLlm(raw: string): NaturalQueryResponse {
+  const boxed = tryParseJsonContent(raw);
+  if (boxed !== undefined) {
+    const parsed = nlJsonSchema.safeParse(boxed.value);
+    if (parsed.success) return parsed.data;
+  }
+
+  const fromFence = tryParseFromSqlFence(raw);
+  if (fromFence) return fromFence;
+
+  throw new AppError(
+    "OPENAI_ERROR",
+    "LLM reply was not valid JSON with sql and explanation (see logs). Ollama models often need strict JSON-only output.",
+    502,
+    { expose: true },
+  );
 }
 
 function resolveLlmAuth(): { apiKey: string; baseURL?: string } {
@@ -74,21 +123,5 @@ export async function generateNlSqlResponse(input: {
     throw new AppError("OPENAI_ERROR", "LLM returned an empty response", 502);
   }
 
-  let parsedJson: unknown;
-  try {
-    parsedJson = JSON.parse(raw);
-  } catch {
-    try {
-      parsedJson = JSON.parse(extractJsonObject(raw));
-    } catch (cause) {
-      throw new AppError("OPENAI_ERROR", "LLM returned invalid JSON", 502, { cause });
-    }
-  }
-
-  const parsed = nlJsonSchema.safeParse(parsedJson);
-  if (!parsed.success) {
-    throw new AppError("OPENAI_ERROR", "LLM JSON did not match the expected contract", 502);
-  }
-
-  return parsed.data;
+  return parseNaturalQueryResponseFromLlm(raw);
 }
