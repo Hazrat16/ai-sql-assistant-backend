@@ -136,13 +136,22 @@ LIMIT ${limit};`;
   };
 }
 
-export async function generateSqlForNaturalLanguage(userQuery: string): Promise<NaturalQueryResponse> {
+export type GenerateSqlOptions = {
+  databaseUrl?: string;
+};
+
+export async function generateSqlForNaturalLanguage(
+  userQuery: string,
+  options?: GenerateSqlOptions,
+): Promise<NaturalQueryResponse> {
   const trimmed = userQuery.trim();
   if (!trimmed) {
     throw new AppError("VALIDATION_ERROR", "Query text is required", 400);
   }
 
-  const schema = await fetchPublicSchema();
+  const schema = await fetchPublicSchema(
+    options?.databaseUrl?.trim() ? { databaseUrl: options.databaseUrl.trim() } : undefined,
+  );
   const schemaJson = JSON.stringify(schema);
   const fp = fingerprintSchema(schemaJson);
   const cacheKey = makeNlQueryCacheKey(trimmed, fp);

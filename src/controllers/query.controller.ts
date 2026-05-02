@@ -5,6 +5,7 @@ import { toErrorResponse } from "../utils/errors.js";
 
 const bodySchema = z.object({
   query: z.string().min(1, "query is required").max(8000),
+  databaseUrl: z.string().min(1).max(8192).optional(),
 });
 
 export async function postQueryController(req: FastifyRequest, reply: FastifyReply) {
@@ -19,7 +20,9 @@ export async function postQueryController(req: FastifyRequest, reply: FastifyRep
   req.log.info({ query: parsed.data.query }, "NL → SQL request received");
 
   try {
-    const result = await generateSqlForNaturalLanguage(parsed.data.query);
+    const result = await generateSqlForNaturalLanguage(parsed.data.query, {
+      databaseUrl: parsed.data.databaseUrl,
+    });
     req.log.info(
       { sqlPreview: result.sql.slice(0, 200), explanationLen: result.explanation.length },
       "NL → SQL response ready",

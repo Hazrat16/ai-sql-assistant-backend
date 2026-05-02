@@ -2,6 +2,8 @@ export type SqlRow = Record<string, unknown>;
 
 export interface NaturalQueryRequest {
   query: string;
+  /** Optional PostgreSQL URL — NL→SQL uses this DB's public schema instead of the server's DATABASE_URL. */
+  databaseUrl?: string;
 }
 
 export interface NaturalQueryResponse {
@@ -12,6 +14,8 @@ export interface NaturalQueryResponse {
 
 export interface ExecuteQueryRequest {
   sql: string;
+  /** Run read-only SELECT against this database instead of DATABASE_URL. */
+  databaseUrl?: string;
 }
 
 export interface ExecuteQueryResponse {

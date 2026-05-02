@@ -23,10 +23,16 @@ Create local env file:
 cp .env.example .env
 ```
 
-Minimum required variable:
+Minimum required variable (either inline or via file):
 
 ```env
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/ai_sql_assistant
+```
+
+Or point at a file whose first non-empty line is the URL (common with Docker/Kubernetes secrets). When set, this overrides `DATABASE_URL`:
+
+```env
+DATABASE_URL_FILE=/run/secrets/database_url
 ```
 
 ## 3) Start Database
@@ -109,10 +115,13 @@ Health check:
 
 ## API Endpoints
 
-- `POST /query` - NL to SQL
+- `POST /query` - NL to SQL (optional body field `databaseUrl` for another Postgres `public` schema)
 - `POST /compile` - parse + validate SQL (no execution)
-- `POST /execute` - execute read-only SELECT
-- `GET /schema` - introspect public schema
+- `POST /execute` - execute read-only SELECT (optional `databaseUrl` to run against that DB)
+- `GET /schema` - introspect public schema for `DATABASE_URL`
+- `POST /schema/connect` - `{ "databaseUrl": "postgres://..." }` — introspect `public` on that database (requires `ALLOW_EXTERNAL_DATABASE_URL=true`)
+
+Disable arbitrary URLs in production lock-downs with `ALLOW_EXTERNAL_DATABASE_URL=false`.
 
 ## Scripts
 

@@ -5,6 +5,7 @@ import { toErrorResponse } from "../utils/errors.js";
 
 const bodySchema = z.object({
   sql: z.string().min(1, "sql is required").max(200_000),
+  databaseUrl: z.string().min(1).max(8192).optional(),
 });
 
 export async function postExecuteController(req: FastifyRequest, reply: FastifyReply) {
@@ -19,7 +20,9 @@ export async function postExecuteController(req: FastifyRequest, reply: FastifyR
   req.log.info({ sqlPreview: parsed.data.sql.slice(0, 200) }, "Execute SQL request received");
 
   try {
-    const rows = await executeReadOnlySelect(parsed.data.sql);
+    const rows = await executeReadOnlySelect(parsed.data.sql, {
+      databaseUrl: parsed.data.databaseUrl,
+    });
     req.log.info({ rowCount: rows.length }, "Execute SQL completed");
     return reply.send({ rows });
   } catch (err) {

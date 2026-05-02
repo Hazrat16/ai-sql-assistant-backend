@@ -3,7 +3,7 @@ import { loadEnv } from "../config/env.js";
 import { postQueryController } from "../controllers/query.controller.js";
 import { postExecuteController } from "../controllers/execute.controller.js";
 import { postCompileController } from "../controllers/compile.controller.js";
-import { getSchemaController } from "../controllers/schema.controller.js";
+import { getSchemaController, postSchemaConnectController } from "../controllers/schema.controller.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   app.get("/health", async () => {
@@ -18,4 +18,5 @@ export async function registerRoutes(app: FastifyInstance) {
   app.post("/compile", postCompileController);
   app.post("/execute", postExecuteController);
   app.get("/schema", getSchemaController);
+  app.post("/schema/connect", postSchemaConnectController);
 }
