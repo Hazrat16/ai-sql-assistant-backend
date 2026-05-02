@@ -6,6 +6,20 @@ import { AppError } from "../utils/errors.js";
 import type { SqlRow } from "../types/api.js";
 import { assertExternalDatabaseAllowed, withEphemeralPgConnection } from "./external-connection.service.js";
 
+function wrapPostgresExecuteError(cause: unknown, defaultLabel: string): AppError {
+  if (cause instanceof AppError) return cause;
+  const msg = cause instanceof Error ? cause.message : String(cause);
+  if (/invalid reference to FROM-clause entry/i.test(msg)) {
+    return new AppError(
+      "BAD_REQUEST",
+      `${msg} Common cause: after "FROM big_customers c" (or similar), use only "c"."column", never "big_customers"."column". Regenerate SQL using consistent aliases.`,
+      400,
+      { cause, expose: true },
+    );
+  }
+  return new AppError("DATABASE_ERROR", defaultLabel, 502, { cause, expose: true });
+}
+
 async function executeReadOnlyWithClient(
   client: PoolClient,
   safeSql: string,
@@ -42,18 +56,12 @@ export async function executeReadOnlySelect(sql: string, options?: ExecuteSqlOpt
             /* ignore */
           }
           if (cause instanceof AppError) throw cause;
-          throw new AppError("DATABASE_ERROR", "Failed to execute SQL on external database", 502, {
-            cause,
-            expose: true,
-          });
+          throw wrapPostgresExecuteError(cause, "Failed to execute SQL on external database");
         }
       });
     } catch (cause) {
       if (cause instanceof AppError) throw cause;
-      throw new AppError("DATABASE_ERROR", "Failed to execute SQL on external database", 502, {
-        cause,
-        expose: true,
-      });
+      throw wrapPostgresExecuteError(cause, "Failed to execute SQL on external database");
     }
   }
 
@@ -77,7 +85,7 @@ export async function executeReadOnlySelect(sql: string, options?: ExecuteSqlOpt
       /* ignore rollback errors */
     }
     if (cause instanceof AppError) throw cause;
-    throw new AppError("DATABASE_ERROR", "Failed to execute SQL", 502, { cause, expose: true });
+    throw wrapPostgresExecuteError(cause, "Failed to execute SQL");
   } finally {
     client.release();
   }

@@ -11,6 +11,8 @@ export function buildNlToSqlSystemPrompt(): string {
     "Your job is to translate business questions into a single, correct PostgreSQL SELECT statement.",
     writePolicy,
     "Prefer explicit column lists when it improves clarity, but SELECT * is acceptable if the user asks for all fields.",
+    "PostgreSQL alias rule (critical): If you write FROM tablename alias (example: FROM big_customers c JOIN big_orders o), every column from that table MUST use ONLY the alias (c.email, o.total_cents). Never mix tablename.column (big_customers.email) together with an alias — PostgreSQL raises \"invalid reference to FROM-clause entry\".",
+    "JOIN ON / WHERE / GROUP BY / ORDER BY must use the same aliases you introduced in FROM (e.g. ON o.customer_id = c.id).",
     "Always qualify tables with schemas when ambiguous (default to public).",
     "Use ISO-friendly casts and safe aggregations. Avoid vendor-specific functions beyond PostgreSQL.",
     "If the question cannot be answered with the provided schema, still return syntactically valid SQL that comes as close as possible and explain the limitation.",

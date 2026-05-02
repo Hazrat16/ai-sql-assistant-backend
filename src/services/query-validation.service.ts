@@ -1,7 +1,10 @@
-import pkg from "node-sql-parser";
+import pkg, { type AST } from "node-sql-parser";
 import { AppError } from "../utils/errors.js";
+import { applyPgQualifiedAliasRewriteToAst } from "./pg-qualified-alias-rewrite.service.js";
 
 const { Parser } = pkg;
+
+type ParserInstance = InstanceType<typeof Parser>;
 
 type AstNode = Record<string, unknown>;
 
@@ -148,11 +151,40 @@ export function assertExecutableSelect(sql: string) {
       throw new AppError("INVALID_SQL", "Unable to analyze SQL statement", 400);
     }
     validateAstNode(only);
-    return trimmed;
+    return finalizeExecutableSql(parser, only, trimmed);
   }
 
   validateAstNode(astRoot);
-  return trimmed;
+  return finalizeExecutableSql(parser, astRoot, trimmed);
+}
+
+/** Canonicalize Postgres alias mistakes (tablename.col → alias.col), then re-parse and re-validate. */
+function finalizeExecutableSql(parser: ParserInstance, ast: AstNode, trimmedFallback: string): string {
+  const changed = applyPgQualifiedAliasRewriteToAst(ast);
+  if (!changed) return trimmedFallback;
+
+  let fixed: string;
+  try {
+    const out = parser.sqlify(ast as unknown as AST, { database: "postgresql" });
+    fixed = typeof out === "string" ? out : trimmedFallback;
+  } catch (cause) {
+    throw new AppError("INVALID_SQL", "Could not serialize SQL after alias rewrite", 400, { cause, expose: true });
+  }
+
+  let reparsed: unknown;
+  try {
+    reparsed = parser.parse(fixed, { database: "postgresql" });
+  } catch (cause) {
+    throw new AppError("INVALID_SQL", "Rewritten SQL failed to parse", 400, { cause, expose: true });
+  }
+
+  const again = getAstFromParseResult(reparsed);
+  const single = Array.isArray(again) ? (again.length === 1 ? again[0] : undefined) : again;
+  if (!single || Array.isArray(single)) {
+    throw new AppError("INVALID_SQL", "Unexpected AST shape after rewrite", 400);
+  }
+  validateAstNode(single);
+  return normalizeSqlInput(fixed);
 }
 
 export interface CompileSqlResult {

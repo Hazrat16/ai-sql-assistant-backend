@@ -174,13 +174,13 @@ export async function generateSqlForNaturalLanguage(
   }
 
   try {
-    assertExecutableSelect(aiResult.sql);
+    aiResult = { ...aiResult, sql: assertExecutableSelect(aiResult.sql) };
   } catch (err) {
     logger.warn({ err, sql: aiResult.sql }, "Model produced non-executable SQL; attempting strict fallback");
     const safe = fallbackResponse(trimmed, schema);
-    assertExecutableSelect(safe.sql);
     aiResult = {
       ...safe,
+      sql: assertExecutableSelect(safe.sql),
       explanation: `${safe.explanation}\n\nOriginal model explanation (for debugging): ${aiResult.explanation}`,
       message: aiResult.message,
     };
