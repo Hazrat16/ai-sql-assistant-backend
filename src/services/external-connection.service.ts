@@ -1,8 +1,25 @@
-import pg from "pg";
-import { loadEnv } from "../config/env.js";
+import pg, { type ClientBase, type ClientConfig } from "pg";
+import { parseIntoClientConfig } from "pg-connection-string";
+import { loadEnv, type Env } from "../config/env.js";
+import { withChannelBindingFromUri, type PgDriverConfig } from "../db/pg-channel-binding.js";
 import { AppError } from "../utils/errors.js";
+import {
+  applyExternalPostgresDnsResolution,
+  type ExternalPostgresDnsFamilyMode,
+} from "../utils/external-postgres-dns.js";
+import { extractPostgresConnectionString } from "../utils/postgres-connection-string.js";
 
 const MAX_DATABASE_URL_LENGTH = 8192;
+
+/** Users sometimes paste an entire curl command (or JSON) into databaseUrl by mistake. */
+function looksLikeShellOrHttpPayload(s: string): boolean {
+  const t = s.trim();
+  if (/^\s*curl\s+/i.test(t)) return true;
+  if (/\b--data-raw\b/i.test(s)) return true;
+  if (/\bcurl\s+['"]?https?:\/\//i.test(s)) return true;
+  if (/\bSec-Fetch-Dest:\s/i.test(s)) return true;
+  return false;
+}
 
 export function assertExternalDatabaseAllowed(): void {
   const env = loadEnv();
@@ -16,7 +33,14 @@ export function assertExternalDatabaseAllowed(): void {
 }
 
 export function validatePostgresConnectionString(urlStr: string): string {
-  const trimmed = urlStr.trim();
+  if (looksLikeShellOrHttpPayload(urlStr)) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "databaseUrl must be only your PostgreSQL connection string (postgresql://...). Do not paste curl commands, headers, or JSON bodies into this field.",
+      400,
+    );
+  }
+  const trimmed = extractPostgresConnectionString(urlStr);
   if (!trimmed) {
     throw new AppError("VALIDATION_ERROR", "databaseUrl is required", 400);
   }
@@ -27,7 +51,7 @@ export function validatePostgresConnectionString(urlStr: string): string {
   if (proto !== "postgres" && proto !== "postgresql") {
     throw new AppError(
       "VALIDATION_ERROR",
-      "Only postgres:// or postgresql:// connection strings are supported",
+      "Only postgres:// or postgresql:// connection strings are supported (paste the URI only, or ensure it includes postgresql://)",
       400,
     );
   }
@@ -35,28 +59,34 @@ export function validatePostgresConnectionString(urlStr: string): string {
 }
 
 /**
- * Runs `fn` with a single short-lived pooled connection, then closes the pool.
+ * Runs `fn` with a single dedicated client (no pool) so connect/teardown matches one-shot CLI tools.
  */
 export async function withEphemeralPgConnection<T>(
   connectionString: string,
-  fn: (client: pg.PoolClient) => Promise<T>,
+  fn: (client: ClientBase) => Promise<T>,
 ): Promise<T> {
   const validated = validatePostgresConnectionString(connectionString);
-  const env = loadEnv();
-  const pool = new pg.Pool({
-    connectionString: validated,
-    max: 1,
-    connectionTimeoutMillis: Math.min(15_000, env.DB_STATEMENT_TIMEOUT_MS),
-    idleTimeoutMillis: 1000,
+  const env: Env = loadEnv();
+  const fromUri: ClientConfig = parseIntoClientConfig(validated);
+  const { connectionString: redundantUriField, ...parsedRest } = fromUri as ClientConfig & {
+    connectionString?: string;
+  };
+  void redundantUriField;
+  const merged = withChannelBindingFromUri(validated, {
+    ...parsedRest,
+    connectionTimeoutMillis: env.DB_CONNECTION_TIMEOUT_MS,
   });
+  const dnsFamily: ExternalPostgresDnsFamilyMode = env.DB_EXTERNAL_POSTGRES_DNS_FAMILY;
+  const config: PgDriverConfig = await applyExternalPostgresDnsResolution(merged, dnsFamily);
+  const client = new pg.Client(config);
   try {
-    const client = await pool.connect();
-    try {
-      return await fn(client);
-    } finally {
-      client.release(true);
-    }
+    await client.connect();
+    return await fn(client);
   } finally {
-    await pool.end();
+    try {
+      await client.end();
+    } catch {
+      /* ignore */
+    }
   }
 }

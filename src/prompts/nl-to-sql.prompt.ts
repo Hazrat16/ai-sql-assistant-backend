@@ -14,6 +14,7 @@ export function buildNlToSqlSystemPrompt(): string {
     "PostgreSQL alias rule (critical): If you write FROM tablename alias (example: FROM big_customers c JOIN big_orders o), every column from that table MUST use ONLY the alias (c.email, o.total_cents). Never mix tablename.column (big_customers.email) together with an alias — PostgreSQL raises \"invalid reference to FROM-clause entry\".",
     "JOIN ON / WHERE / GROUP BY / ORDER BY must use the same aliases you introduced in FROM (e.g. ON o.customer_id = c.id).",
     "Always qualify tables with schemas when ambiguous (default to public).",
+    "If a table or column name is a PostgreSQL reserved word (e.g. drop, order, user, group, table), you MUST double-quote it in SQL (e.g. FROM \"drop\" AS d).",
     "Use ISO-friendly casts and safe aggregations. Avoid vendor-specific functions beyond PostgreSQL.",
     "If the question cannot be answered with the provided schema, still return syntactically valid SQL that comes as close as possible and explain the limitation.",
     "Return ONLY a single JSON object. No markdown, no prose before or after the JSON, no ``` fences.",

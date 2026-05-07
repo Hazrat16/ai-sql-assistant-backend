@@ -1,7 +1,8 @@
-import type { PoolClient } from "pg";
+import type { ClientBase } from "pg";
 import { loadEnv } from "../config/env.js";
 import { pool } from "../db/pool.js";
 import { AppError } from "../utils/errors.js";
+import { wrapPostgresDatabaseError } from "../utils/postgres-errors.js";
 import { assertExternalDatabaseAllowed, withEphemeralPgConnection } from "./external-connection.service.js";
 
 export interface SchemaColumn {
@@ -56,7 +57,7 @@ function rowsToPayload(
   return { tables };
 }
 
-async function introspectWithClient(client: PoolClient): Promise<SchemaPayload> {
+async function introspectWithClient(client: ClientBase): Promise<SchemaPayload> {
   const res = await client.query<{
     table_name: string;
     column_name: string;
@@ -107,10 +108,7 @@ export async function fetchPublicSchema(options?: FetchSchemaOptions): Promise<S
       return await withEphemeralPgConnection(url, (client) => introspectWithClient(client));
     } catch (cause) {
       if (cause instanceof AppError) throw cause;
-      throw new AppError("DATABASE_ERROR", "Failed to read external database schema", 502, {
-        cause,
-        expose: true,
-      });
+      throw wrapPostgresDatabaseError(cause, "Failed to read external database schema");
     }
   }
 
@@ -123,7 +121,8 @@ export async function fetchPublicSchema(options?: FetchSchemaOptions): Promise<S
   try {
     return await introspectWithClient(client);
   } catch (cause) {
-    throw new AppError("DATABASE_ERROR", "Failed to read database schema", 502, { cause, expose: true });
+    if (cause instanceof AppError) throw cause;
+    throw wrapPostgresDatabaseError(cause, "Failed to read database schema");
   } finally {
     client.release();
   }

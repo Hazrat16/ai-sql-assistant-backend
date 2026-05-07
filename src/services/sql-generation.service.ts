@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import pg from "pg";
 import { loadEnv } from "../config/env.js";
 import { AppError } from "../utils/errors.js";
 import type { NaturalQueryResponse } from "../types/api.js";
@@ -7,8 +8,14 @@ import { generateNlSqlResponse } from "./ai.service.js";
 import { assertExecutableSelect } from "./query-validation.service.js";
 import { getNlQueryCache, makeNlQueryCacheKey, setNlQueryCache } from "./query-cache.service.js";
 import { logger } from "../utils/logger.js";
+import { quoteBareSchemaTableNames } from "../utils/quote-schema-tables-in-sql.js";
 
 const env = loadEnv();
+
+/** Double-quote identifiers so reserved words (e.g. "drop", "order") parse and execute. */
+function qi(ident: string): string {
+  return pg.escapeIdentifier(ident);
+}
 
 function fingerprintSchema(schemaJson: string): string {
   return createHash("sha256").update(schemaJson).digest("hex");
@@ -114,16 +121,16 @@ function fallbackResponse(userQuery: string, schema: SchemaPayload): NaturalQuer
   if (wantsCount) {
     return {
       sql: `SELECT COUNT(*)::bigint AS total
-FROM ${table.name};`,
+FROM ${qi(table.name)};`,
       explanation: `Offline SQL mode generated a safe count query for table "${table.name}" without using any paid AI provider.`,
       message: "Generated from schema using local fallback mode.",
     };
   }
 
-  const columns = pickColumns(table).join(", ");
-  const orderClause = orderCol ? `\nORDER BY ${orderCol} DESC` : "";
+  const columns = pickColumns(table).map(qi).join(", ");
+  const orderClause = orderCol ? `\nORDER BY ${qi(orderCol)} DESC` : "";
   const sql = `SELECT ${columns}
-FROM ${table.name}${orderClause}
+FROM ${qi(table.name)}${orderClause}
 LIMIT ${limit};`;
 
   return {
@@ -174,7 +181,8 @@ export async function generateSqlForNaturalLanguage(
   }
 
   try {
-    aiResult = { ...aiResult, sql: assertExecutableSelect(aiResult.sql) };
+    const normalizedSql = quoteBareSchemaTableNames(aiResult.sql, schema);
+    aiResult = { ...aiResult, sql: assertExecutableSelect(normalizedSql) };
   } catch (err) {
     logger.warn({ err, sql: aiResult.sql }, "Model produced non-executable SQL; attempting strict fallback");
     const safe = fallbackResponse(trimmed, schema);

@@ -1,14 +1,23 @@
-import type { PoolClient } from "pg";
+import type { ClientBase } from "pg";
 import { pool } from "../db/pool.js";
 import { loadEnv } from "../config/env.js";
 import { assertExecutableSelect } from "./query-validation.service.js";
 import { AppError } from "../utils/errors.js";
 import type { SqlRow } from "../types/api.js";
 import { assertExternalDatabaseAllowed, withEphemeralPgConnection } from "./external-connection.service.js";
+import { wrapPostgresDatabaseError } from "../utils/postgres-errors.js";
 
 function wrapPostgresExecuteError(cause: unknown, defaultLabel: string): AppError {
   if (cause instanceof AppError) return cause;
   const msg = cause instanceof Error ? cause.message : String(cause);
+  if (/missing FROM-clause entry for table/i.test(msg)) {
+    return new AppError(
+      "BAD_REQUEST",
+      `${msg} Add the table to FROM/JOIN (for example: SELECT ... FROM "Drop" d ...), or remove the table-qualified reference.`,
+      400,
+      { cause, expose: true },
+    );
+  }
   if (/invalid reference to FROM-clause entry/i.test(msg)) {
     return new AppError(
       "BAD_REQUEST",
@@ -17,11 +26,11 @@ function wrapPostgresExecuteError(cause: unknown, defaultLabel: string): AppErro
       { cause, expose: true },
     );
   }
-  return new AppError("DATABASE_ERROR", defaultLabel, 502, { cause, expose: true });
+  return wrapPostgresDatabaseError(cause, defaultLabel);
 }
 
 async function executeReadOnlyWithClient(
-  client: PoolClient,
+  client: ClientBase,
   safeSql: string,
   timeoutMs: number,
 ): Promise<SqlRow[]> {

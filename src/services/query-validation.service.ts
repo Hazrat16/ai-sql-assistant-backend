@@ -138,7 +138,8 @@ export function assertExecutableSelect(sql: string) {
   try {
     parsed = parser.parse(trimmed, { database: "postgresql" });
   } catch (cause) {
-    throw new AppError("INVALID_SQL", "Could not parse SQL", 400, { cause, expose: true });
+    const detail = cause instanceof Error && cause.message.trim() ? `: ${cause.message.trim()}` : "";
+    throw new AppError("INVALID_SQL", `Could not parse SQL${detail}`, 400, { cause, expose: true });
   }
 
   const astRoot = getAstFromParseResult(parsed);

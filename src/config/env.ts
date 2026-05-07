@@ -65,6 +65,8 @@ const envSchema = z.object({
    */
   OPENAI_RESPONSE_FORMAT: z.enum(["json_object", "none"]).default("json_object"),
   OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+  /** Max time to obtain a TCP connection from the pool (ephemeral external DB pools and internal pool behavior may use this). */
+  DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
@@ -101,6 +103,11 @@ const envSchema = z.object({
       return "true";
     }, z.enum(["true", "false"]))
     .transform((v) => v === "true"),
+  /**
+   * External `databaseUrl` connect DNS: `auto` uses IPv4 for *.neon.tech (common fix for broken IPv6).
+   * `hostname` uses the OS default (A/AAAA order). `ipv4` / `ipv6` force that address family.
+   */
+  DB_EXTERNAL_POSTGRES_DNS_FAMILY: z.enum(["auto", "hostname", "ipv4", "ipv6"]).default("auto"),
 });
 
 export type Env = z.infer<typeof envSchema>;
