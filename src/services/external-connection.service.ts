@@ -3,10 +3,7 @@ import { parseIntoClientConfig } from "pg-connection-string";
 import { loadEnv, type Env } from "../config/env.js";
 import { withChannelBindingFromUri, type PgDriverConfig } from "../db/pg-channel-binding.js";
 import { AppError } from "../utils/errors.js";
-import {
-  applyExternalPostgresDnsResolution,
-  type ExternalPostgresDnsFamilyMode,
-} from "../utils/external-postgres-dns.js";
+import { applyExternalPostgresDnsResolution } from "../utils/external-postgres-dns.js";
 import { extractPostgresConnectionString } from "../utils/postgres-connection-string.js";
 
 const MAX_DATABASE_URL_LENGTH = 8192;
@@ -58,6 +55,17 @@ export function validatePostgresConnectionString(urlStr: string): string {
   return trimmed;
 }
 
+function resolveExternalDnsFamily(env: Env): "auto" | "ipv4" | "ipv6" | "hostname" {
+  const raw = (env as Record<string, unknown>)["DB_EXTERNAL_POSTGRES_DNS_FAMILY"];
+  if (raw === "ipv4" || raw === "ipv6" || raw === "hostname") return raw;
+  return "auto";
+}
+
+async function resolveExternalClientConfig(base: PgDriverConfig, env: Env): Promise<ClientConfig> {
+  const dnsFamily = resolveExternalDnsFamily(env);
+  return (await applyExternalPostgresDnsResolution(base, dnsFamily)) as ClientConfig;
+}
+
 /**
  * Runs `fn` with a single dedicated client (no pool) so connect/teardown matches one-shot CLI tools.
  */
@@ -68,16 +76,13 @@ export async function withEphemeralPgConnection<T>(
   const validated = validatePostgresConnectionString(connectionString);
   const env: Env = loadEnv();
   const fromUri: ClientConfig = parseIntoClientConfig(validated);
-  const { connectionString: redundantUriField, ...parsedRest } = fromUri as ClientConfig & {
-    connectionString?: string;
-  };
+  const { connectionString: redundantUriField, ...parsedRest } = fromUri;
   void redundantUriField;
   const merged = withChannelBindingFromUri(validated, {
     ...parsedRest,
     connectionTimeoutMillis: env.DB_CONNECTION_TIMEOUT_MS,
   });
-  const dnsFamily: ExternalPostgresDnsFamilyMode = env.DB_EXTERNAL_POSTGRES_DNS_FAMILY;
-  const config: PgDriverConfig = await applyExternalPostgresDnsResolution(merged, dnsFamily);
+  const config: ClientConfig = await resolveExternalClientConfig(merged, env);
   const client = new pg.Client(config);
   try {
     await client.connect();

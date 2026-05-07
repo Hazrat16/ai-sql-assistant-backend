@@ -54,6 +54,23 @@ function tryParseFromSqlFence(raw: string): NaturalQueryResponse | null {
   };
 }
 
+/** Last-resort recovery for models that return raw SQL text without JSON/fences. */
+function tryParseFromPlainSql(raw: string): NaturalQueryResponse | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const match = /((?:with|select)\b[\s\S]*?;?)(?:\s*$)/i.exec(trimmed);
+  if (!match?.[1]) return null;
+  let sql = match[1].trim();
+  if (!/^(with|select)\b/i.test(sql)) return null;
+  if (!sql.endsWith(";")) sql = `${sql};`;
+  return {
+    sql,
+    explanation:
+      "Parsed raw SQL text from the model reply (expected JSON object with sql/explanation). Configure the model to return strict JSON for best results.",
+    message: "Recovered from plain SQL response",
+  };
+}
+
 function parseNaturalQueryResponseFromLlm(raw: string): NaturalQueryResponse {
   const boxed = tryParseJsonContent(raw);
   if (boxed !== undefined) {
@@ -63,6 +80,8 @@ function parseNaturalQueryResponseFromLlm(raw: string): NaturalQueryResponse {
 
   const fromFence = tryParseFromSqlFence(raw);
   if (fromFence) return fromFence;
+  const fromPlainSql = tryParseFromPlainSql(raw);
+  if (fromPlainSql) return fromPlainSql;
 
   throw new AppError(
     "OPENAI_ERROR",
